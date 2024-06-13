@@ -26,6 +26,8 @@ func (r *Responder) Respond(data interface{}, err error) {
 	}
 
 	if err != nil {
+		fmt.Fprint(os.Stderr, "\u0001[38;5;2m")
 		fmt.Fprint(os.Stderr, err, "\n")
+		fmt.Fprint(os.Stderr, "\u0001[0m")
 	}
 }

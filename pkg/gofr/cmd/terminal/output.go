@@ -22,7 +22,7 @@ type Output struct {
 
 // NewOutput intialises the output type with output stream as standard out
 // and the output stream properties like file descriptor and the output is a terminal
-func NewOutput() *Output {
+func New() *Output {
 	o := &Output{out: os.Stdout}
 	o.fd, o.isTerminal = getTerminalInfo(o.out)
 

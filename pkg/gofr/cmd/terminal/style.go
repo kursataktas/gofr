@@ -6,51 +6,45 @@ import (
 )
 
 const (
-	// ESC Escape character.
-	ESC = '\x1b'
-	// CSI Control Sequence Introducer.
-	CSI = string(ESC) + "["
-	// OSC Operating System Command.
-	OSC = string(ESC) + "]"
+	// escape Escape character.
+	escape = '\x1b'
+	// csi Control Sequence Introducer.
+	csi = string(escape) + "["
+	// osc Operating System Command.
+	osc = string(escape) + "]"
 )
 
 // Sequence definitions.
 const (
 	// Cursor positioning
-	CursorUpSeq              = "%dA"
-	CursorDownSeq            = "%dB"
-	CursorForwardSeq         = "%dC"
-	CursorBackSeq            = "%dD"
-	CursorNextLineSeq        = "%dE"
-	CursorPreviousLineSeq    = "%dF"
-	CursorPositionSeq        = "%d;%dH"
-	EraseDisplaySeq          = "%dJ"
-	EraseLineSeq             = "%dK"
-	SaveCursorPositionSeq    = "s"
-	RestoreCursorPositionSeq = "u"
-	ChangeScrollingRegionSeq = "%d;%dr"
-	InsertLineSeq            = "%dL"
-	DeleteLineSeq            = "%dM"
+	cursorUpSeq              = "%dA"
+	cursorDownSeq            = "%dB"
+	cursorForwardSeq         = "%dC"
+	cursorBackSeq            = "%dD"
+	cursorNextLineSeq        = "%dE"
+	cursorPreviousLineSeq    = "%dF"
+	cursorPositionSeq        = "%d;%dH"
+	eraseDisplaySeq          = "%dJ"
+	eraseLineSeq             = "%dK"
+	saveCursorPositionSeq    = "s"
+	restoreCursorPositionSeq = "u"
+	changeScrollingRegionSeq = "%d;%dr"
+	insertLineSeq            = "%dL"
+	deleteLineSeq            = "%dM"
 
 	// Explicit values ersasing lines
-	EraseLineRightSeq  = "0K"
-	EraseLineLeftSeq   = "1K"
-	EraseEntireLineSeq = "2K"
+	eraseLineRightSeq  = "0K"
+	eraseLineLeftSeq   = "1K"
+	eraseEntireLineSeq = "2K"
 
 	// Screen
-	RestoreScreenSeq = "?47l"
-	SaveScreenSeq    = "?47h"
-	AltScreenSeq     = "?1049h"
-	ExitAltScreenSeq = "?1049l"
-
-	// Bracketed paste.
-	// https://en.wikipedia.org/wiki/Bracketed-paste
-	EnableBracketedPasteSeq  = "?2004h"
-	DisableBracketedPasteSeq = "?2004l"
-
-	SetWindowTitleSeq = "2;%s"
-	ShowCursorSeq     = "?25h"
-	HideCursorSeq     = "?25l"
+	restoreScreenSeq  = "?47l"
+	saveScreenSeq     = "?47h"
+	altScreenSeq      = "?1049h"
+	exitAltScreenSeq  = "?1049l"
+	setWindowTitleSeq = "2;%s"
+	showCursorSeq     = "?25h"
+	hideCursorSeq     = "?25l"
 )
 
 const (
@@ -60,145 +54,135 @@ const (
 
 // Reset the terminal to its default style, removing any active styles.
 func (o *Output) Reset() {
-	fmt.Fprint(o.out, CSI+"0"+"m")
+	fmt.Fprint(o.out, csi+"0"+"m")
 }
 
 // RestoreScreen restores a previously saved screen state.
 func (o *Output) RestoreScreen() {
-	fmt.Fprint(o.out, CSI+RestoreScreenSeq)
+	fmt.Fprint(o.out, csi+restoreScreenSeq)
 }
 
 // SaveScreen saves the screen state.
 func (o *Output) SaveScreen() {
-	fmt.Fprint(o.out, CSI+SaveScreenSeq)
+	fmt.Fprint(o.out, csi+saveScreenSeq)
 }
 
 // AltScreen switches to the alternate screen buffer. The former view can be
 // restored with ExitAltScreen().
 func (o *Output) AltScreen() {
-	fmt.Fprint(o.out, CSI+AltScreenSeq)
+	fmt.Fprint(o.out, csi+altScreenSeq)
 }
 
 // ExitAltScreen exits the alternate screen buffer and returns to the former
 // terminal view.
 func (o *Output) ExitAltScreen() {
-	fmt.Fprint(o.out, CSI+ExitAltScreenSeq)
+	fmt.Fprint(o.out, csi+exitAltScreenSeq)
 }
 
 // ClearScreen clears the visible portion of the terminal.
 func (o *Output) ClearScreen() {
-	fmt.Fprintf(o.out, CSI+EraseDisplaySeq, clearScreen)
+	fmt.Fprintf(o.out, csi+eraseDisplaySeq, clearScreen)
 	o.MoveCursor(1, 1)
 }
 
 // MoveCursor moves the cursor to a given position.
 func (o *Output) MoveCursor(row, column int) {
-	fmt.Fprintf(o.out, CSI+CursorPositionSeq, row, column)
+	fmt.Fprintf(o.out, csi+cursorPositionSeq, row, column)
 }
 
 // HideCursor hides the cursor.
 func (o *Output) HideCursor() {
-	fmt.Fprint(o.out, CSI+HideCursorSeq)
+	fmt.Fprint(o.out, csi+hideCursorSeq)
 }
 
 // ShowCursor shows the cursor.
 func (o *Output) ShowCursor() {
-	fmt.Fprint(o.out, CSI+ShowCursorSeq)
+	fmt.Fprint(o.out, csi+showCursorSeq)
 }
 
 // SaveCursorPosition saves the cursor position.
 func (o *Output) SaveCursorPosition() {
-	fmt.Fprint(o.out, CSI+SaveCursorPositionSeq)
+	fmt.Fprint(o.out, csi+saveCursorPositionSeq)
 }
 
 // RestoreCursorPosition restores a saved cursor position.
 func (o *Output) RestoreCursorPosition() {
-	fmt.Fprint(o.out, CSI+RestoreCursorPositionSeq)
+	fmt.Fprint(o.out, csi+restoreCursorPositionSeq)
 }
 
 // CursorUp moves the cursor up a given number of lines.
 func (o *Output) CursorUp(n int) {
-	fmt.Fprintf(o.out, CSI+CursorUpSeq, n)
+	fmt.Fprintf(o.out, csi+cursorUpSeq, n)
 }
 
 // CursorDown moves the cursor down a given number of lines.
 func (o *Output) CursorDown(n int) {
-	fmt.Fprintf(o.out, CSI+CursorDownSeq, n)
+	fmt.Fprintf(o.out, csi+cursorDownSeq, n)
 }
 
 // CursorForward moves the cursor up a given number of lines.
 func (o *Output) CursorForward(n int) {
-	fmt.Fprintf(o.out, CSI+CursorForwardSeq, n)
+	fmt.Fprintf(o.out, csi+cursorForwardSeq, n)
 }
 
 // CursorBack moves the cursor backwards a given number of cells.
 func (o *Output) CursorBack(n int) {
-	fmt.Fprintf(o.out, CSI+CursorBackSeq, n)
+	fmt.Fprintf(o.out, csi+cursorBackSeq, n)
 }
 
 // CursorNextLine moves the cursor down a given number of lines and places it at
 // the beginning of the line.
 func (o *Output) CursorNextLine(n int) {
-	fmt.Fprintf(o.out, CSI+CursorNextLineSeq, n)
+	fmt.Fprintf(o.out, csi+cursorNextLineSeq, n)
 }
 
 // CursorPrevLine moves the cursor up a given number of lines and places it at
 // the beginning of the line.
 func (o *Output) CursorPrevLine(n int) {
-	fmt.Fprintf(o.out, CSI+CursorPreviousLineSeq, n)
+	fmt.Fprintf(o.out, csi+cursorPreviousLineSeq, n)
 }
 
 // ClearLine clears the current line.
 func (o *Output) ClearLine() {
-	fmt.Fprint(o.out, CSI+EraseEntireLineSeq)
+	fmt.Fprint(o.out, csi+eraseEntireLineSeq)
 }
 
 // ClearLineLeft clears the line to the left of the cursor.
 func (o *Output) ClearLineLeft() {
-	fmt.Fprint(o.out, CSI+EraseLineLeftSeq)
+	fmt.Fprint(o.out, csi+eraseLineLeftSeq)
 }
 
 // ClearLineRight clears the line to the right of the cursor.
 func (o *Output) ClearLineRight() {
-	fmt.Fprint(o.out, CSI+EraseLineRightSeq)
+	fmt.Fprint(o.out, csi+eraseLineRightSeq)
 }
 
 // ClearLines clears a given number of lines.
 func (o *Output) ClearLines(n int) {
-	clearLine := fmt.Sprintf(CSI+EraseLineSeq, clearScreen)
-	cursorUp := fmt.Sprintf(CSI+CursorUpSeq, moveCursorUp)
+	clearLine := fmt.Sprintf(csi+eraseLineSeq, clearScreen)
+	cursorUp := fmt.Sprintf(csi+cursorUpSeq, moveCursorUp)
 
 	fmt.Fprint(o.out, clearLine+strings.Repeat(cursorUp+clearLine, n))
 }
 
 // ChangeScrollingRegion sets the scrolling region of the terminal.
 func (o *Output) ChangeScrollingRegion(top, bottom int) {
-	fmt.Fprintf(o.out, CSI+ChangeScrollingRegionSeq, top, bottom)
+	fmt.Fprintf(o.out, csi+changeScrollingRegionSeq, top, bottom)
 }
 
 // InsertLines inserts the given number of lines at the top of the scrollable
 // region, pushing lines below down.
 func (o *Output) InsertLines(n int) {
-	fmt.Fprintf(o.out, CSI+InsertLineSeq, n)
+	fmt.Fprintf(o.out, csi+insertLineSeq, n)
 }
 
 // DeleteLines deletes the given number of lines, pulling any lines in
 // the scrollable region below up.
 func (o *Output) DeleteLines(n int) {
-	fmt.Fprintf(o.out, CSI+DeleteLineSeq, n)
+	fmt.Fprintf(o.out, csi+deleteLineSeq, n)
 }
 
 // SetWindowTitle sets the terminal window title.
 func (o *Output) SetWindowTitle(title string) {
-	fmt.Fprintf(o.out, OSC+SetWindowTitleSeq, title)
-}
-
-// EnableBracketedPaste enables bracketed paste.
-func (o *Output) EnableBracketedPaste() {
-	fmt.Fprintf(o.out, CSI+EnableBracketedPasteSeq)
-}
-
-// DisableBracketedPaste disables bracketed paste.
-func (o *Output) DisableBracketedPaste() {
-	fmt.Fprintf(o.out, CSI+DisableBracketedPasteSeq)
+	fmt.Fprintf(o.out, osc+setWindowTitleSeq, title)
 }
