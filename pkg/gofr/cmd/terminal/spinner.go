@@ -44,7 +44,7 @@ func NewGlobeSpinner(o *Output) *Spinner {
 	}
 }
 
-func (s *Spinner) Spin() {
+func (s *Spinner) Spin() *Spinner {
 	t := time.NewTicker(s.FPS)
 	s.ticker = t
 	s.started = true
@@ -67,6 +67,8 @@ func (s *Spinner) Spin() {
 	}()
 
 	s.Stream.ClearLine()
+
+	return s
 }
 
 func (s *Spinner) Stop() {

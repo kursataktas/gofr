@@ -8,7 +8,7 @@ import (
 
 func TestNewOutput(t *testing.T) {
 	// intialize a new standard output stream
-	o := NewOutput()
+	o := New()
 
 	assert.Equal(t, os.Stdout, o.out)
 	assert.Equal(t, uintptr(1), o.fd)
