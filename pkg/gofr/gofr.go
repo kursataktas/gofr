@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/mux"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/zipkin"
@@ -17,7 +18,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
-
 	"google.golang.org/grpc"
 
 	"gofr.dev/pkg/gofr/config"
@@ -39,8 +39,7 @@ type App struct {
 	httpServer   *httpServer
 	metricServer *metricServer
 
-	cmd *cmd
-
+	cmd  *cmd
 	cron *Crontab
 
 	// container is unexported because this is an internal implementation and applications are provided access to it via Context
@@ -81,7 +80,7 @@ func New() *App {
 		port = defaultHTTPPort
 	}
 
-	app.httpServer = newHTTPServer(app.container, port)
+	app.httpServer = newHTTPServer(app.container, port, middleware.GetConfigs(app.Config))
 
 	// GRPC Server
 	port, err = strconv.Atoi(app.Config.Get("GRPC_PORT"))
@@ -100,11 +99,9 @@ func New() *App {
 func NewCMD() *App {
 	app := &App{}
 	app.readConfig(true)
-
 	app.container = container.NewContainer(nil)
 	app.container.Logger = logging.NewFileLogger(app.Config.Get("CMD_LOGS_FILE"))
 	app.cmd = &cmd{}
-
 	app.container.Create(app.Config)
 	app.initTracer()
 
@@ -147,6 +144,21 @@ func (a *App) Run() {
 			function:  catchAllHandler,
 			container: a.container,
 		})
+
+		var registeredMethods []string
+
+		_ = a.httpServer.router.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
+			met, _ := route.GetMethods()
+			for _, method := range met {
+				if !contains(registeredMethods, method) { // Check for uniqueness before adding
+					registeredMethods = append(registeredMethods, method)
+				}
+			}
+
+			return nil
+		})
+
+		*a.httpServer.router.RegisteredRoutes = registeredMethods
 
 		go func(s *httpServer) {
 			defer wg.Done()
@@ -233,10 +245,11 @@ func (a *App) PATCH(pattern string, handler Handler) {
 
 func (a *App) add(method, pattern string, h Handler) {
 	a.httpRegistered = true
+
 	a.httpServer.router.Add(method, pattern, handler{
 		function:       h,
 		container:      a.container,
-		requestTimeout: a.Config.GetOrDefault("REQUEST_TIMEOUT", "5"),
+		requestTimeout: a.Config.Get("REQUEST_TIMEOUT"),
 	})
 }
 
@@ -250,8 +263,8 @@ func (a *App) Logger() logging.Logger {
 
 // SubCommand adds a sub-command to the CLI application.
 // Can be used to create commands like "kubectl get" or "kubectl get ingress".
-func (a *App) SubCommand(pattern string, handler Handler) {
-	a.cmd.addRoute(pattern, handler)
+func (a *App) SubCommand(pattern string, handler Handler, options ...Options) {
+	a.cmd.addRoute(pattern, handler, options...)
 }
 
 func (a *App) Migrate(migrationsMap map[int64]migration.Migrate) {
@@ -375,9 +388,7 @@ func (a *App) AddRESTHandlers(object interface{}) error {
 		return err
 	}
 
-	e := entity{cfg.name, cfg.entityType, cfg.primaryKey}
-
-	a.registerCRUDHandlers(e, object)
+	a.registerCRUDHandlers(cfg, object)
 
 	return nil
 }
@@ -397,4 +408,15 @@ func (a *App) AddCronJob(schedule, jobName string, job CronFunc) {
 	if err := a.cron.AddJob(schedule, jobName, job); err != nil {
 		a.Logger().Errorf("error adding cron job, err : %v", err)
 	}
+}
+
+// contains is a helper function checking for duplicate entry in a slice.
+func contains(elems []string, v string) bool {
+	for _, s := range elems {
+		if v == s {
+			return true
+		}
+	}
+
+	return false
 }

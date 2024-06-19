@@ -18,16 +18,14 @@ func (r *Responder) Respond(data interface{}, err error) {
 					break
 				}
 
-				fmt.Fprint(os.Stdout, v, "\n")
+				fmt.Fprintln(os.Stdout, v)
 			}
 		} else {
-			fmt.Fprint(os.Stdout, data, "\n")
+			fmt.Fprintln(os.Stdout, data)
 		}
 	}
 
 	if err != nil {
-		fmt.Fprint(os.Stderr, "\u0001[38;5;2m")
-		fmt.Fprint(os.Stderr, err, "\n")
-		fmt.Fprint(os.Stderr, "\u0001[0m")
+		fmt.Fprintln(os.Stderr, err)
 	}
 }
