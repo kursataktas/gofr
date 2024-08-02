@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"gofr.dev/pkg/gofr/config"
 	"gofr.dev/pkg/gofr/container"
@@ -135,9 +136,9 @@ func TestGofr_ServerRun(t *testing.T) {
 		"http://localhost:"+strconv.Itoa(defaultHTTPPort)+"/hello", http.NoBody)
 	resp, err := netClient.Do(re)
 
-	assert.NoError(t, err, "TEST Failed.\n")
+	require.NoError(t, err, "TEST Failed.\n")
 
-	assert.Equal(t, resp.StatusCode, http.StatusOK, "TEST Failed.\n")
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "TEST Failed.\n")
 
 	resp.Body.Close()
 }
@@ -311,6 +312,8 @@ func Test_AddRESTHandlers(t *testing.T) {
 	}{
 		{"success case", &user{}, nil},
 		{"invalid object", &invalidObject, errInvalidObject},
+		{"invalid object", user{}, fmt.Errorf("failed to register routes for 'user' struct, %w", errNonPointerObject)},
+		{"invalid object", nil, errObjectIsNil},
 	}
 
 	for i, tc := range tests {
@@ -321,33 +324,42 @@ func Test_AddRESTHandlers(t *testing.T) {
 }
 
 func Test_initTracer(t *testing.T) {
-	mockConfig1 := config.NewMockConfig(map[string]string{
-		"TRACE_EXPORTER": "zipkin",
-		"TRACER_HOST":    "localhost",
-		"TRACER_PORT":    "2005",
-	})
+	createMockConfig := func(traceExporter, url, authKey string) config.Config {
+		return config.NewMockConfig(map[string]string{
+			"TRACE_EXPORTER":  traceExporter,
+			"TRACER_URL":      url,
+			"TRACER_AUTH_KEY": authKey,
+		})
+	}
+	mockConfig1 := createMockConfig("zipkin", "http://localhost:2005/api/v2/spans", "")
 
-	mockConfig2 := config.NewMockConfig(map[string]string{
-		"TRACE_EXPORTER": "jaeger",
-		"TRACER_HOST":    "localhost",
-		"TRACER_PORT":    "2005",
-	})
+	mockConfig2 := createMockConfig("zipkin", "http://localhost:2005/api/v2/spans", "valid-token")
 
-	mockConfig3 := config.NewMockConfig(map[string]string{
-		"TRACE_EXPORTER": "gofr",
-	})
+	mockConfig3 := createMockConfig("jaeger", "localhost:4317", "")
+
+	mockConfig4 := createMockConfig("jaeger", "localhost:4317", "valid-token")
+
+	mockConfig5 := createMockConfig("otlp", "localhost:4317", "")
+
+	mockConfig6 := createMockConfig("otlp", "localhost:4317", "valid-token")
+
+	mockConfig7 := createMockConfig("gofr", "", "")
 
 	tests := []struct {
 		desc               string
 		config             config.Config
 		expectedLogMessage string
 	}{
-		{"zipkin exporter", mockConfig1, "Exporting traces to zipkin."},
-		{"jaeger exporter", mockConfig2, "Exporting traces to jaeger."},
-		{"gofr exporter", mockConfig3, "Exporting traces to GoFr at https://tracer.gofr.dev"},
+		{"zipkin exporter", mockConfig1, "Exporting traces to zipkin at http://localhost:2005/api/v2/spans"},
+		{"zipkin exporter with authkey", mockConfig2, "Exporting traces to zipkin at http://localhost:2005/api/v2/spans"},
+		{"jaeger exporter", mockConfig3, "Exporting traces to jaeger at localhost:4317"},
+		{"jaeger exporter with auth", mockConfig4, "Exporting traces to jaeger at localhost:4317"},
+		{"otlp exporter", mockConfig5, "Exporting traces to otlp at localhost:4317"},
+		{"otlp exporter with authKey", mockConfig6, "Exporting traces to otlp at localhost:4317"},
+		{"gofr exporter with default url", mockConfig7, "Exporting traces to GoFr at https://tracer.gofr.dev"},
 	}
 
-	for _, tc := range tests {
+	for i, tc := range tests {
 		logMessage := testutil.StdoutOutputForFunc(func() {
 			mockContainer, _ := container.NewMockContainer(t)
 
@@ -355,33 +367,48 @@ func Test_initTracer(t *testing.T) {
 				Config:    tc.config,
 				container: mockContainer,
 			}
-
 			a.initTracer()
 		})
-
-		assert.Contains(t, logMessage, tc.expectedLogMessage)
+		assert.Contains(t, logMessage, tc.expectedLogMessage, "TEST[%d], Failed.\n%s", i, tc.desc)
 	}
 }
 
 func Test_initTracer_invalidConfig(t *testing.T) {
-	mockConfig := config.NewMockConfig(map[string]string{
-		"TRACE_EXPORTER": "abc",
-		"TRACER_HOST":    "localhost",
-		"TRACER_PORT":    "2005",
-	})
+	createMockConfig := func(traceExporter, url, authKey string) config.Config {
+		return config.NewMockConfig(map[string]string{
+			"TRACE_EXPORTER":  traceExporter,
+			"TRACER_URL":      url,
+			"TRACER_AUTH_KEY": authKey,
+		})
+	}
+	mockConfig1 := createMockConfig("abc", "https://tracer-service.dev", "")
+	mockConfig2 := createMockConfig("", "https://tracer-service.dev", "")
+	mockConfig3 := createMockConfig("otlp", "", "")
 
-	errLogMessage := testutil.StderrOutputForFunc(func() {
-		mockContainer, _ := container.NewMockContainer(t)
+	testErr := []struct {
+		desc               string
+		config             config.Config
+		expectedLogMessage string
+	}{
+		{"unsupported trace_exporter", mockConfig1, "unsupported TRACE_EXPORTER: abc"},
+		{"missing trace_exporter", mockConfig2, "missing TRACE_EXPORTER config, should be provided with TRACER_URL to enable tracing"},
+		{"miss tracer_url ", mockConfig3,
+			"missing TRACER_URL config, should be provided with TRACE_EXPORTER to enable tracing"},
+	}
 
-		a := App{
-			Config:    mockConfig,
-			container: mockContainer,
-		}
+	for i, tc := range testErr {
+		logMessage := testutil.StderrOutputForFunc(func() {
+			mockContainer, _ := container.NewMockContainer(t)
 
-		a.initTracer()
-	})
+			a := App{
+				Config:    tc.config,
+				container: mockContainer,
+			}
+			a.initTracer()
+		})
 
-	assert.Contains(t, errLogMessage, "unsupported trace exporter.")
+		assert.Contains(t, logMessage, tc.expectedLogMessage, "TEST[%d], Failed.\n%s", i, tc.desc)
+	}
 }
 
 func Test_UseMiddleware(t *testing.T) {
@@ -434,6 +461,54 @@ func Test_UseMiddleware(t *testing.T) {
 	assert.Equal(t, "applied", testHeaderValue, "Test_UseMiddleware Failed! header value mismatch.")
 }
 
+func Test_APIKeyAuthMiddleware(t *testing.T) {
+	c, _ := container.NewMockContainer(t)
+
+	app := &App{
+		httpServer: &httpServer{
+			router: gofrHTTP.NewRouter(),
+			port:   8001,
+		},
+		container: c,
+		Config:    config.NewMockConfig(map[string]string{"REQUEST_TIMEOUT": "5"}),
+	}
+
+	apiKeys := []string{"test-key"}
+	validateFunc := func(_ *container.Container, apiKey string) bool {
+		return apiKey == "test-key"
+	}
+
+	// Registering APIKey middleware with and without custom validator
+	app.EnableAPIKeyAuth(apiKeys...)
+	app.EnableAPIKeyAuthWithValidator(validateFunc)
+
+	app.GET("/test", func(_ *Context) (interface{}, error) {
+		return "success", nil
+	})
+
+	go app.Run()
+	time.Sleep(1 * time.Second)
+
+	var netClient = &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		"http://localhost:8001/test", http.NoBody)
+	req.Header.Set("X-API-Key", "test-key")
+
+	// Send the request and check for successful response
+	resp, err := netClient.Do(req)
+	if err != nil {
+		t.Errorf("error while making HTTP request in Test_APIKeyAuthMiddleware. err: %v", err)
+		return
+	}
+
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "Test_APIKeyAuthMiddleware Failed!")
+}
+
 func Test_SwaggerEndpoints(t *testing.T) {
 	// Create the openapi.json file within the static directory
 	openAPIFilePath := filepath.Join("static", OpenAPIJSON)
@@ -473,7 +548,7 @@ func Test_SwaggerEndpoints(t *testing.T) {
 		}
 	}()
 
-	assert.Nil(t, err, "Expected error to be nil, got : %v", err)
+	require.NoError(t, err, "Expected error to be nil, got : %v", err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "text/html; charset=utf-8", resp.Header.Get("Content-Type"))
 }
@@ -502,7 +577,7 @@ func Test_AddCronJob_Success(t *testing.T) {
 		ctx.Logger.Info("test-job-success")
 	})
 
-	assert.Equal(t, len(a.cron.jobs), 1)
+	assert.Len(t, a.cron.jobs, 1)
 
 	for _, j := range a.cron.jobs {
 		if j.name == "test-job" {
@@ -512,4 +587,161 @@ func Test_AddCronJob_Success(t *testing.T) {
 	}
 
 	assert.Truef(t, pass, "unable to add cron job to cron table")
+}
+
+func TestStaticHandler(t *testing.T) {
+	const indexHTML = "indexTest.html"
+
+	// Generating some files for testing
+	htmlContent := []byte("<html><head><title>Test Static File</title></head><body><p>Testing Static File</p></body></html>")
+
+	createPublicDirectory(t, defaultPublicStaticDir, htmlContent)
+
+	defer os.Remove("static/indexTest.html")
+
+	createPublicDirectory(t, "testdir", htmlContent)
+
+	defer os.RemoveAll("testdir")
+
+	app := New()
+
+	app.AddStaticFiles("gofrTest", "./testdir")
+
+	app.httpRegistered = true
+	app.httpServer.port = 8022
+
+	go app.Run()
+	time.Sleep(1 * time.Second)
+
+	host := "http://localhost:8022"
+
+	tests := []struct {
+		desc                       string
+		method                     string
+		path                       string
+		statusCode                 int
+		expectedBody               string
+		expectedBodyLength         int
+		expectedResponseHeaderType string
+	}{
+		{
+			desc: "check file content index.html", method: http.MethodGet, path: "/" + defaultPublicStaticDir + "/" + indexHTML,
+			statusCode: http.StatusOK, expectedBodyLength: len(htmlContent),
+			expectedResponseHeaderType: "text/html; charset=utf-8", expectedBody: string(htmlContent),
+		},
+		{
+			desc: "check public endpoint", method: http.MethodGet,
+			path: "/" + defaultPublicStaticDir, statusCode: http.StatusNotFound,
+		},
+		{
+			desc: "check file content index.html in custom dir", method: http.MethodGet, path: "/" + "gofrTest" + "/" + indexHTML,
+			statusCode: http.StatusOK, expectedBodyLength: len(htmlContent),
+			expectedResponseHeaderType: "text/html; charset=utf-8", expectedBody: string(htmlContent),
+		},
+		{
+			desc: "check public endpoint in custom dir", method: http.MethodGet, path: "/" + "gofrTest",
+			statusCode: http.StatusNotFound,
+		},
+	}
+
+	for i, tc := range tests {
+		request, err := http.NewRequestWithContext(context.Background(), tc.method, host+tc.path, http.NoBody)
+		if err != nil {
+			t.Fatalf("TEST[%d], Failed to create request, error: %s", i, err)
+		}
+
+		request.Header.Set("Content-Type", "application/json")
+
+		client := http.Client{}
+
+		resp, err := client.Do(request)
+		if err != nil {
+			t.Fatalf("TEST[%d], Request failed, error: %s", i, err)
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("TEST[%d], Failed to read response body, error: %s", i, err)
+		}
+
+		body := string(bodyBytes)
+
+		require.NoError(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
+		assert.Equal(t, tc.statusCode, resp.StatusCode, "TEST[%d], Failed with Status Body.\n%s", i, tc.desc)
+
+		if tc.expectedBody != "" {
+			assert.Contains(t, body, tc.expectedBody, "TEST[%d], Failed with Expected Body.\n%s", i, tc.desc)
+		}
+
+		if tc.expectedBodyLength != 0 {
+			contentLength := resp.Header.Get("Content-Length")
+			assert.Equal(t, strconv.Itoa(tc.expectedBodyLength), contentLength, "TEST[%d], Failed at Content-Length.\n%s", i, tc.desc)
+		}
+
+		if tc.expectedResponseHeaderType != "" {
+			assert.Equal(t,
+				tc.expectedResponseHeaderType,
+				resp.Header.Get("Content-Type"),
+				"TEST[%d], Failed at Expected Content-Type.\n%s", i, tc.desc)
+		}
+
+		resp.Body.Close()
+	}
+}
+
+func TestStaticHandlerInvalidFilePath(t *testing.T) {
+	// Generating some files for testing
+	logs := testutil.StderrOutputForFunc(func() {
+		app := New()
+
+		app.AddStaticFiles("gofrTest", ".//,.!@#$%^&")
+	})
+
+	assert.Contains(t, logs, "no such file or directory")
+	assert.Contains(t, logs, "error in registering '/gofrTest' static endpoint")
+}
+
+func createPublicDirectory(t *testing.T, defaultPublicStaticDir string, htmlContent []byte) {
+	t.Helper()
+
+	const indexHTML = "indexTest.html"
+
+	directory := "./" + defaultPublicStaticDir
+	if _, err := os.Stat(directory); err != nil {
+		if err = os.Mkdir("./"+defaultPublicStaticDir, os.ModePerm); err != nil {
+			t.Fatalf("Couldn't create a "+defaultPublicStaticDir+" directory, error: %s", err)
+		}
+	}
+
+	file, err := os.Create(filepath.Join(directory, indexHTML))
+
+	if err != nil {
+		t.Fatalf("Couldn't create %s file", indexHTML)
+	}
+
+	_, err = file.Write(htmlContent)
+	if err != nil {
+		t.Fatalf("Couldn't write to %s file", indexHTML)
+	}
+
+	file.Close()
+}
+
+func Test_Shutdown(t *testing.T) {
+	logs := testutil.StdoutOutputForFunc(func() {
+		g := New()
+
+		g.GET("/hello", func(*Context) (interface{}, error) {
+			return helloWorld, nil
+		})
+
+		go g.Run()
+		time.Sleep(10 * time.Millisecond)
+
+		err := g.Shutdown(context.Background())
+
+		require.NoError(t, err, "Test_Shutdown Failed!")
+	})
+
+	assert.Contains(t, logs, "Application shutdown complete", "Test_Shutdown Failed!")
 }

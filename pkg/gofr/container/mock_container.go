@@ -2,6 +2,8 @@ package container
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"testing"
 
 	"go.uber.org/mock/gomock"
@@ -12,21 +14,57 @@ import (
 )
 
 type Mocks struct {
-	Redis *MockRedis
-	SQL   *MockDB
+	Redis      *MockRedis
+	SQL        *MockDB
+	Clickhouse *MockClickhouse
+	Cassandra  *MockCassandra
+	Mongo      *MockMongo
+	KVStore    *MockKVStore
 }
 
 func NewMockContainer(t *testing.T) (*Container, Mocks) {
+	t.Helper()
+
 	container := &Container{}
 	container.Logger = logging.NewLogger(logging.DEBUG)
 
-	sqlMock := NewMockDB(gomock.NewController(t))
+	ctrl := gomock.NewController(t)
+
+	sqlMock := NewMockDB(ctrl)
 	container.SQL = sqlMock
 
-	redisMock := NewMockRedis(gomock.NewController(t))
+	redisMock := NewMockRedis(ctrl)
 	container.Redis = redisMock
 
-	mocks := Mocks{Redis: redisMock, SQL: sqlMock}
+	cassandraMock := NewMockCassandra(ctrl)
+	container.Cassandra = cassandraMock
+
+	clickhouseMock := NewMockClickhouse(ctrl)
+	container.Clickhouse = clickhouseMock
+
+	mongoMock := NewMockMongo(ctrl)
+	container.Mongo = mongoMock
+
+	kvStoreMock := NewMockKVStore(ctrl)
+	container.KVStore = kvStoreMock
+
+	mocks := Mocks{
+		Redis:      redisMock,
+		SQL:        sqlMock,
+		Clickhouse: clickhouseMock,
+		Cassandra:  cassandraMock,
+		Mongo:      mongoMock,
+		KVStore:    kvStoreMock,
+	}
+
+	sqlMock.EXPECT().Close().AnyTimes()
+	redisMock.EXPECT().Close().AnyTimes()
+
+	mockMetrics := NewMockMetrics(ctrl)
+	container.metricsManager = mockMetrics
+
+	mockMetrics.EXPECT().RecordHistogram(gomock.Any(), "app_http_service_response", gomock.Any(), "path", gomock.Any(),
+		"method", gomock.Any(), "status", fmt.Sprintf("%v", http.StatusInternalServerError)).AnyTimes()
 
 	return container, mocks
 }
@@ -34,22 +72,24 @@ func NewMockContainer(t *testing.T) (*Container, Mocks) {
 type MockPubSub struct {
 }
 
-func (m *MockPubSub) CreateTopic(_ context.Context, _ string) error {
+func (*MockPubSub) CreateTopic(_ context.Context, _ string) error {
 	return nil
 }
 
-func (m *MockPubSub) DeleteTopic(_ context.Context, _ string) error {
+func (*MockPubSub) DeleteTopic(_ context.Context, _ string) error {
 	return nil
 }
 
-func (m *MockPubSub) Health() datasource.Health {
+func (*MockPubSub) Health() datasource.Health {
 	return datasource.Health{}
 }
 
-func (m *MockPubSub) Publish(_ context.Context, _ string, _ []byte) error {
+func (*MockPubSub) Publish(_ context.Context, _ string, _ []byte) error {
 	return nil
 }
 
-func (m *MockPubSub) Subscribe(_ context.Context, _ string) (*pubsub.Message, error) {
+func (*MockPubSub) Subscribe(_ context.Context, _ string) (*pubsub.Message, error) {
 	return nil, nil
 }
+
+func (*MockPubSub) Close() error { return nil }

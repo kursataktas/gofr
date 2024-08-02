@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"gofr.dev/pkg/gofr"
 	"gofr.dev/pkg/gofr/container"
@@ -51,11 +52,11 @@ func Test_main(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, host+tc.path, nil)
 		resp, err := c.Do(req)
 
-		assert.Nil(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
+		require.NoError(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
 
 		bodyBytes, err := io.ReadAll(resp.Body)
 
-		assert.Nil(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
+		require.NoError(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
 
 		assert.Equal(t, tc.expectedRes, string(bodyBytes), "TEST[%d], Failed.\n%s", i, tc.desc)
 
@@ -66,21 +67,20 @@ func Test_main(t *testing.T) {
 }
 
 func TestHTTPHandlerURLError(t *testing.T) {
-	logger := logging.NewLogger(logging.DEBUG)
-
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://localhost:5000/handle", bytes.NewBuffer([]byte(`{"key":"value"}`)))
-
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		"http://localhost:5000/handle", bytes.NewBuffer([]byte(`{"key":"value"}`)))
 	gofrReq := gofrHTTP.NewRequest(req)
 
-	ctx := &gofr.Context{Context: context.Background(),
-		Request: gofrReq, Container: &container.Container{Logger: logger}}
+	mockContainer, _ := container.NewMockContainer(t)
 
-	ctx.Container.Services = map[string]service.HTTP{"cat-facts": service.NewHTTPService("http://invalid", ctx.Logger, nil)}
+	ctx := &gofr.Context{Context: context.Background(), Request: gofrReq, Container: mockContainer}
+
+	ctx.Container.Services = map[string]service.HTTP{"cat-facts": service.NewHTTPService("http://invalid", ctx.Logger, mockContainer.Metrics())}
 
 	resp, err := Handler(ctx)
 
 	assert.Nil(t, resp)
-	assert.NotNil(t, err)
+	require.Error(t, err)
 }
 
 func TestHTTPHandlerResponseUnmarshalError(t *testing.T) {
@@ -105,5 +105,5 @@ func TestHTTPHandlerResponseUnmarshalError(t *testing.T) {
 	resp, err := Handler(ctx)
 
 	assert.Nil(t, resp)
-	assert.NotNil(t, err)
+	require.Error(t, err)
 }

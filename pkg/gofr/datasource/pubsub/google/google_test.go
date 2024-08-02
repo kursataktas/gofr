@@ -7,6 +7,7 @@ import (
 	gcPubSub "cloud.google.com/go/pubsub"
 	"cloud.google.com/go/pubsub/pstest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -17,6 +18,8 @@ import (
 )
 
 func getGoogleClient(t *testing.T) *gcPubSub.Client {
+	t.Helper()
+
 	srv := pstest.NewServer()
 
 	conn, err := grpc.NewClient(srv.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -33,9 +36,7 @@ func getGoogleClient(t *testing.T) *gcPubSub.Client {
 }
 
 func TestGoogleClient_New_Error(t *testing.T) {
-	var (
-		g *googleClient
-	)
+	var g *googleClient
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -78,7 +79,7 @@ func TestGoogleClient_Publish_Success(t *testing.T) {
 
 		err := g.Publish(context.Background(), topic, message)
 
-		assert.Nil(t, err)
+		require.NoError(t, err)
 	})
 
 	assert.Contains(t, out, "PUB")
@@ -107,9 +108,7 @@ func TestGoogleClient_PublishTopic_Error(t *testing.T) {
 	mockMetrics.EXPECT().IncrementCounter(gomock.Any(), "app_pubsub_publish_total_count", "topic", "test-topic")
 
 	err := g.Publish(ctx, "test-topic", []byte(""))
-	if assert.Error(t, err) {
-		assert.Contains(t, err.Error(), "context canceled")
-	}
+	require.ErrorContains(t, err, "context canceled")
 }
 
 func TestGoogleClient_getTopic_Success(t *testing.T) {
@@ -121,8 +120,8 @@ func TestGoogleClient_getTopic_Success(t *testing.T) {
 
 	topic, err := g.getTopic(context.Background(), "test-topic")
 
-	assert.Nil(t, err)
-	assert.Equal(t, topic.ID(), "test-topic")
+	require.NoError(t, err)
+	assert.Equal(t, "test-topic", topic.ID())
 }
 
 func TestGoogleClient_getTopic_Error(t *testing.T) {
@@ -138,7 +137,7 @@ func TestGoogleClient_getTopic_Error(t *testing.T) {
 	topic, err := g.getTopic(ctx, "test-topic")
 
 	assert.Nil(t, topic)
-	assert.Contains(t, err.Error(), "context canceled")
+	require.ErrorContains(t, err, "context canceled")
 }
 
 func TestGoogleClient_getSubscription(t *testing.T) {
@@ -152,7 +151,7 @@ func TestGoogleClient_getSubscription(t *testing.T) {
 
 	sub, err := g.getSubscription(context.Background(), topic)
 
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, sub)
 }
 
@@ -170,6 +169,24 @@ func Test_validateConfigs(t *testing.T) {
 	for _, tc := range testCases {
 		err := validateConfigs(tc.input)
 
-		assert.Equal(t, tc.expErr, err)
+		require.ErrorIs(t, err, tc.expErr)
 	}
+}
+
+func TestGoogleClient_CloseReturnsError(t *testing.T) {
+	// client already present
+	g := &googleClient{
+		client: getGoogleClient(t),
+	}
+
+	err := g.Close()
+
+	require.NoError(t, err)
+
+	// client empty
+	g = &googleClient{}
+
+	err = g.Close()
+
+	require.NoError(t, err)
 }

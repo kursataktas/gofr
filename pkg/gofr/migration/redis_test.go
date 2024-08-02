@@ -7,70 +7,62 @@ import (
 
 	goRedis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"gofr.dev/pkg/gofr/container"
 )
 
-func TestNewRedis(t *testing.T) {
-	mockCmd := &Mockcommands{}
-
-	r := newRedis(mockCmd)
-	if r.commands != mockCmd {
-		t.Errorf("Expected newRedis to set commands, but got %v", r.commands)
-	}
-}
-
 func TestRedis_Get(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockCmd := NewMockcommands(ctrl)
+	mockCmd := NewMockRedis(ctrl)
 	mockCmd.EXPECT().Get(context.Background(), "test_key").Return(&goRedis.StringCmd{})
 
-	r := redis{mockCmd}
+	r := redisDS{mockCmd}
 	_, err := r.Get(context.Background(), "test_key").Result()
 
-	assert.NoError(t, err, "TEST Failed.\n")
+	require.NoError(t, err, "TEST Failed.\n")
 }
 
 func TestRedis_Set(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockCmd := NewMockcommands(ctrl)
+	mockCmd := NewMockRedis(ctrl)
 	mockCmd.EXPECT().Set(context.Background(), "test_key", "test_value", time.Duration(0)).Return(&goRedis.StatusCmd{})
 
-	r := redis{mockCmd}
+	r := redisDS{mockCmd}
 	_, err := r.Set(context.Background(), "test_key", "test_value", 0).Result()
 
-	assert.NoError(t, err, "TEST Failed.\n")
+	require.NoError(t, err, "TEST Failed.\n")
 }
 
 func TestRedis_Del(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockCmd := NewMockcommands(ctrl)
+	mockCmd := NewMockRedis(ctrl)
 	mockCmd.EXPECT().Del(context.Background(), "test_key").Return(&goRedis.IntCmd{})
 
-	r := redis{mockCmd}
+	r := redisDS{mockCmd}
 	_, err := r.Del(context.Background(), "test_key").Result()
 
-	assert.NoError(t, err, "TEST Failed.\n")
+	require.NoError(t, err, "TEST Failed.\n")
 }
 
 func TestRedis_Rename(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockCmd := NewMockcommands(ctrl)
+	mockCmd := NewMockRedis(ctrl)
 	mockCmd.EXPECT().Rename(context.Background(), "test_key", "test_new_key").Return(&goRedis.StatusCmd{})
 
-	r := redis{mockCmd}
+	r := redisDS{mockCmd}
 	_, err := r.Rename(context.Background(), "test_key", "test_new_key").Result()
 
-	assert.NoError(t, err, "TEST Failed.\n")
+	require.NoError(t, err, "TEST Failed.\n")
 }
 
 func TestRedisMigrator_GetLastMigration(t *testing.T) {
@@ -78,11 +70,11 @@ func TestRedisMigrator_GetLastMigration(t *testing.T) {
 	defer ctrl.Finish()
 
 	c, mocks := container.NewMockContainer(t)
-	mockMigrator := NewMockMigrator(ctrl)
+	mockMigrator := NewMockmigrator(ctrl)
 
 	m := redisMigrator{
-		commands: mocks.Redis,
-		Migrator: mockMigrator,
+		Redis:    mocks.Redis,
+		migrator: mockMigrator,
 	}
 
 	tests := []struct {
@@ -143,11 +135,11 @@ func TestRedisMigrator_beginTransaction(t *testing.T) {
 	defer ctrl.Finish()
 
 	c, mocks := container.NewMockContainer(t)
-	mockMigrator := NewMockMigrator(ctrl)
+	mockMigrator := NewMockmigrator(ctrl)
 
 	m := redisMigrator{
-		commands: mocks.Redis,
-		Migrator: mockMigrator,
+		Redis:    mocks.Redis,
+		migrator: mockMigrator,
 	}
 
 	mocks.Redis.EXPECT().TxPipeline()
@@ -155,5 +147,5 @@ func TestRedisMigrator_beginTransaction(t *testing.T) {
 
 	data := m.beginTransaction(c)
 
-	assert.Equal(t, migrationData{}, data, "TEST Failed.\n")
+	assert.Equal(t, transactionData{}, data, "TEST Failed.\n")
 }

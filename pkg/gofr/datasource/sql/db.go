@@ -113,6 +113,14 @@ func (d *DB) Begin() (*Tx, error) {
 	return &Tx{Tx: tx, config: d.config, logger: d.logger, metrics: d.metrics}, nil
 }
 
+func (d *DB) Close() error {
+	if d.DB != nil {
+		return d.DB.Close()
+	}
+
+	return nil
+}
+
 type Tx struct {
 	*sql.Tx
 	config  *DBConfig
@@ -257,7 +265,7 @@ func (d *DB) Select(ctx context.Context, data interface{}, query string, args ..
 	}
 }
 
-func (d *DB) rowsToStruct(rows *sql.Rows, vo reflect.Value) {
+func (*DB) rowsToStruct(rows *sql.Rows, vo reflect.Value) {
 	v := vo
 	if vo.Kind() == reflect.Ptr {
 		v = vo.Elem()

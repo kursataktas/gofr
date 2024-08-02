@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-redis/redismock/v9"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"gofr.dev/pkg/gofr"
 	"gofr.dev/pkg/gofr/config"
@@ -38,7 +39,7 @@ func TestIntegration_SimpleAPIServer(t *testing.T) {
 	}
 
 	for i, tc := range tests {
-		req, _ := http.NewRequest("GET", host+tc.path, nil)
+		req, _ := http.NewRequest(http.MethodGet, host+tc.path, nil)
 		req.Header.Set("content-type", "application/json")
 
 		c := http.Client{}
@@ -50,13 +51,13 @@ func TestIntegration_SimpleAPIServer(t *testing.T) {
 
 		b, err := io.ReadAll(resp.Body)
 
-		assert.Nil(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
+		require.NoError(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
 
 		_ = json.Unmarshal(b, &data)
 
 		assert.Equal(t, tc.body, data.Data, "TEST[%d], Failed.\n%s", i, tc.desc)
 
-		assert.Nil(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
+		require.NoError(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode, "TEST[%d], Failed.\n%s", i, tc.desc)
 
@@ -92,7 +93,7 @@ func TestIntegration_SimpleAPIServer_Errors(t *testing.T) {
 	}
 
 	for i, tc := range tests {
-		req, _ := http.NewRequest("GET", host+tc.path, nil)
+		req, _ := http.NewRequest(http.MethodGet, host+tc.path, nil)
 		req.Header.Set("content-type", "application/json")
 
 		c := http.Client{}
@@ -104,13 +105,13 @@ func TestIntegration_SimpleAPIServer_Errors(t *testing.T) {
 
 		b, err := io.ReadAll(resp.Body)
 
-		assert.Nil(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
+		require.NoError(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
 
 		_ = json.Unmarshal(b, &data)
 
 		assert.Equal(t, tc.body, data.Error, "TEST[%d], Failed.\n%s", i, tc.desc)
 
-		assert.Nil(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
+		require.NoError(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
 
 		assert.Equal(t, tc.statusCode, resp.StatusCode, "TEST[%d], Failed.\n%s", i, tc.desc)
 
@@ -129,13 +130,13 @@ func TestIntegration_SimpleAPIServer_Health(t *testing.T) {
 	}
 
 	for i, tc := range tests {
-		req, _ := http.NewRequest("GET", host+tc.path, nil)
+		req, _ := http.NewRequest(http.MethodGet, host+tc.path, nil)
 		req.Header.Set("content-type", "application/json")
 
 		c := http.Client{}
 		resp, err := c.Do(req)
 
-		assert.Nil(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
+		require.NoError(t, err, "TEST[%d], Failed.\n%s", i, tc.desc)
 
 		assert.Equal(t, tc.statusCode, resp.StatusCode, "TEST[%d], Failed.\n%s", i, tc.desc)
 	}
@@ -157,5 +158,5 @@ func TestRedisHandler(t *testing.T) {
 	resp, err := RedisHandler(ctx)
 
 	assert.Nil(t, resp)
-	assert.NotNil(t, err)
+	require.Error(t, err)
 }
