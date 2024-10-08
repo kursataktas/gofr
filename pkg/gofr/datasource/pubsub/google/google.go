@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	gcPubSub "cloud.google.com/go/pubsub"
@@ -132,13 +133,15 @@ func (g *googleClient) Subscribe(ctx context.Context, topic string) (*pubsub.Mes
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	subscription.ReceiveSettings.MaxOutstandingMessages = 1
+
+	var wg sync.WaitGroup
+	wg.Add(1)
 
 	start := time.Now()
-	err = subscription.Receive(ctx, func(_ context.Context, msg *gcPubSub.Message) {
-		end := time.Since(start)
 
-		defer cancel()
+	err = subscription.Receive(ctx, func(ctx context.Context, msg *gcPubSub.Message) {
+		end := time.Since(start)
 
 		m.Topic = topic
 		m.Value = msg.Data
@@ -154,6 +157,8 @@ func (g *googleClient) Subscribe(ctx context.Context, topic string) (*pubsub.Mes
 			PubSubBackend: "GCP",
 			Time:          end.Microseconds(),
 		})
+
+		wg.Done()
 	})
 
 	if err != nil {
@@ -162,7 +167,10 @@ func (g *googleClient) Subscribe(ctx context.Context, topic string) (*pubsub.Mes
 		return nil, err
 	}
 
-	g.metrics.IncrementCounter(ctx, "app_pubsub_subscribe_success_count", "topic", topic, "subscription_name", g.Config.SubscriptionName)
+	wg.Wait()
+
+	g.metrics.IncrementCounter(ctx, "app_pubsub_subscribe_success_count", "topic", topic, "subscription_name",
+		g.Config.SubscriptionName)
 
 	return m, nil
 }
