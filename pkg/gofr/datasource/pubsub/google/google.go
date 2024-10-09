@@ -136,6 +136,7 @@ func (g *googleClient) Subscribe(ctx context.Context, topic string) (*pubsub.Mes
 	subscription.ReceiveSettings.MaxOutstandingMessages = 1
 
 	var wg sync.WaitGroup
+
 	wg.Add(1)
 
 	start := time.Now()
@@ -160,16 +161,17 @@ func (g *googleClient) Subscribe(ctx context.Context, topic string) (*pubsub.Mes
 			})
 
 			wg.Done()
+
+			<-ctx.Done()
 		})
 	}()
+	wg.Wait()
 
 	if err != nil {
 		g.logger.Errorf("error getting a message from google: %s", err.Error())
 
 		return nil, err
 	}
-
-	wg.Wait()
 
 	g.metrics.IncrementCounter(ctx, "app_pubsub_subscribe_success_count", "topic", topic, "subscription_name",
 		g.Config.SubscriptionName)
