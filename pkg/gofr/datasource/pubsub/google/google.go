@@ -141,37 +141,38 @@ func (g *googleClient) Subscribe(ctx context.Context, topic string) (*pubsub.Mes
 
 	start := time.Now()
 
-	go func() {
-		err = subscription.Receive(ctx, func(ctx context.Context, msg *gcPubSub.Message) {
-			end := time.Since(start)
+	processMessage := func(ctx context.Context, msg *gcPubSub.Message) {
+		end := time.Since(start)
 
-			m.Topic = topic
-			m.Value = msg.Data
-			m.MetaData = msg.Attributes
-			m.Committer = newGoogleMessage(msg)
+		m.Topic = topic
+		m.Value = msg.Data
+		m.MetaData = msg.Attributes
+		m.Committer = newGoogleMessage(msg)
 
-			g.logger.Debug(&pubsub.Log{
-				Mode:          "SUB",
-				CorrelationID: span.SpanContext().TraceID().String(),
-				MessageValue:  string(m.Value),
-				Topic:         topic,
-				Host:          g.Config.ProjectID,
-				PubSubBackend: "GCP",
-				Time:          end.Microseconds(),
-			})
-
-			wg.Done()
-
-			<-ctx.Done()
+		g.logger.Debug(&pubsub.Log{
+			Mode:          "SUB",
+			CorrelationID: span.SpanContext().TraceID().String(),
+			MessageValue:  string(m.Value),
+			Topic:         topic,
+			Host:          g.Config.ProjectID,
+			PubSubBackend: "GCP",
+			Time:          end.Microseconds(),
 		})
-	}()
-	wg.Wait()
 
-	if err != nil {
-		g.logger.Errorf("error getting a message from google: %s", err.Error())
+		wg.Done()
 
-		return nil, err
+		<-ctx.Done()
 	}
+
+	go func() {
+		err = subscription.Receive(ctx, processMessage)
+
+		if err != nil {
+			g.logger.Errorf("error getting a message from google: %s", err.Error())
+		}
+	}()
+
+	wg.Wait()
 
 	g.metrics.IncrementCounter(ctx, "app_pubsub_subscribe_success_count", "topic", topic, "subscription_name",
 		g.Config.SubscriptionName)
