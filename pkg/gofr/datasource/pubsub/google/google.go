@@ -164,13 +164,13 @@ func (g *googleClient) Subscribe(ctx context.Context, topic string) (*pubsub.Mes
 		<-ctx.Done()
 	}
 
-	go func() {
+	go func(ctx context.Context) {
 		err = subscription.Receive(ctx, processMessage)
 
 		if err != nil {
 			g.logger.Errorf("error getting a message from google: %s", err.Error())
 		}
-	}()
+	}(ctx)
 
 	wg.Wait()
 
